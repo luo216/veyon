@@ -44,12 +44,19 @@ public:
 		SecurityInit,
 		SecurityChallenge,
 		SecurityResult,
+		SecurityVeyonAuth,
+		SecurityVeyonToken,
 		FramebufferInit,
 		Running,
 		StateCount
 	} ;
 
-	VncClientProtocol( QIODevice* socket, const Password& vncPassword );
+	VncClientProtocol( QIODevice* socket, const Password& vncPassword, const Password& token = {} );
+
+	void setToken( const Password& token )
+	{
+		m_token = token;
+	}
 
 	State state() const
 	{
@@ -110,6 +117,8 @@ private:
 	bool receiveSecurityTypes();
 	bool receiveSecurityChallenge();
 	bool receiveSecurityResult();
+	bool receiveSecurityVeyonAuth();
+	bool receiveSecurityVeyonToken();
 	bool receiveServerInitMessage();
 
 	bool receiveFramebufferUpdateMessage();
@@ -141,6 +150,7 @@ private:
 	State m_state;
 
 	Password m_vncPassword;
+	Password m_token{};
 
 	QByteArray m_serverInitMessage;
 
