@@ -46,6 +46,9 @@ public:
 	using MessageList = QList<QPair<qint64, QByteArray>>;
 	static constexpr auto DefaultBandwidthLimit = 100;
 
+	DemoServer( const QString& vncServerHost, int vncServerPort, const Password& vncServerPassword,
+				const Password& demoAccessToken, const DemoConfiguration& configuration,
+				int demoServerPort, QObject *parent );
 	DemoServer( int vncServerPort, const Password& vncServerPassword, const Password& demoAccessToken,
 				const DemoConfiguration& configuration, int demoServerPort, QObject *parent );
 	~DemoServer() override;
@@ -112,6 +115,7 @@ private:
 	const DemoConfiguration& m_configuration;
 	const qint64 m_memoryLimit;
 	const int m_keyFrameInterval;
+	const QString m_vncServerHost;
 	const int m_vncServerPort;
 	const Password m_demoAccessToken;
 

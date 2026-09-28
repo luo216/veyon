@@ -35,16 +35,18 @@
 #include "VncClientProtocol.h"
 
 
-DemoServer::DemoServer( int vncServerPort, const Password& vncServerPassword, const Password& demoAccessToken,
-						const DemoConfiguration& configuration, int demoServerPort, QObject *parent ) :
+DemoServer::DemoServer( const QString& vncServerHost, int vncServerPort, const Password& vncServerPassword,
+						const Password& demoAccessToken, const DemoConfiguration& configuration,
+						int demoServerPort, QObject *parent ) :
 	QTcpServer( parent ),
 	m_configuration( configuration ),
 	m_memoryLimit(m_configuration.memoryLimit() * BytesPerMB),
 	m_keyFrameInterval( m_configuration.keyFrameInterval() * 1000 ),
+	m_vncServerHost( vncServerHost ),
 	m_vncServerPort( vncServerPort ),
 	m_demoAccessToken( demoAccessToken ),
 	m_vncServerSocket( new QTcpSocket( this ) ),
-	m_vncClientProtocol( new VncClientProtocol( m_vncServerSocket, vncServerPassword ) ),
+	m_vncClientProtocol( new VncClientProtocol( m_vncServerSocket, vncServerPassword, demoAccessToken ) ),
 	m_framebufferUpdateTimer( this ),
 	m_lastFullFramebufferUpdate(),
 	m_requestFullFramebufferUpdate(false)
@@ -85,6 +87,14 @@ DemoServer::DemoServer( int vncServerPort, const Password& vncServerPassword, co
 	m_framebufferUpdateTimer.start( m_configuration.framebufferUpdateInterval() );
 
 	reconnectToVncServer();
+}
+
+
+
+DemoServer::DemoServer( int vncServerPort, const Password& vncServerPassword, const Password& demoAccessToken,
+						const DemoConfiguration& configuration, int demoServerPort, QObject *parent ) :
+	DemoServer( QString(), vncServerPort, vncServerPassword, demoAccessToken, configuration, demoServerPort, parent )
+{
 }
 
 
@@ -204,7 +214,14 @@ void DemoServer::reconnectToVncServer()
 
 	m_vncClientProtocol->start();
 
-	m_vncServerSocket->connectToHost( QHostAddress::LocalHost, static_cast<quint16>( m_vncServerPort ) );
+	if( m_vncServerHost.isEmpty() || m_vncServerHost == QStringLiteral("localhost") || m_vncServerHost == QStringLiteral("127.0.0.1") )
+	{
+		m_vncServerSocket->connectToHost( QHostAddress::LocalHost, static_cast<quint16>( m_vncServerPort ) );
+	}
+	else
+	{
+		m_vncServerSocket->connectToHost( QHostAddress( m_vncServerHost ), static_cast<quint16>( m_vncServerPort ) );
+	}
 
 	connect(m_vncServerSocket, &QTcpSocket::disconnected, this, &DemoServer::reconnectToVncServer);
 }

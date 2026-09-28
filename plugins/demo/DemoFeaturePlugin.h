@@ -54,12 +54,13 @@ public:
 		ViewportY,
 		ViewportWidth,
 		ViewportHeight,
-		VncServerPortOffset
+		VncServerPortOffset,
+		IsRelay
 	};
 	Q_ENUM(Argument)
 
 	explicit DemoFeaturePlugin( QObject* parent = nullptr );
-	~DemoFeaturePlugin() override = default;
+	~DemoFeaturePlugin() override;
 
 	Plugin::Uid uid() const override
 	{

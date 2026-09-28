@@ -23,6 +23,7 @@
  */
 
 #include <QMessageBox>
+#include <QRandomGenerator>
 #include <QScreen>
 
 #include "AuthenticationCredentials.h"
@@ -117,6 +118,17 @@ DemoFeaturePlugin::DemoFeaturePlugin( QObject* parent ) :
 	connect( &m_demoServerControlTimer, &QTimer::timeout, this, &DemoFeaturePlugin::controlDemoServer );
 
 	updateFeatures();
+}
+
+
+
+DemoFeaturePlugin::~DemoFeaturePlugin()
+{
+	if( m_demoServer )
+	{
+		m_demoServer->terminate();
+	}
+	delete m_demoClient;
 }
 
 
@@ -433,15 +445,39 @@ bool DemoFeaturePlugin::handleFeatureMessage( VeyonWorkerInterface& worker, cons
 				const auto demoServerPort = message.argument( Argument::DemoServerPort ).toInt();
 				const auto isFullscreenDemo = message.featureUid() == m_demoClientFullScreenFeature.uid();
 				const auto viewport = message.argument( Argument::Viewport ).toRect();
+				const auto isRelay = message.argument( Argument::IsRelay ).toBool();
 
-				vDebug() << "connecting with master" << demoServerHost;
-				m_demoClient = new DemoClient( demoServerHost, demoServerPort, isFullscreenDemo, viewport );
+				vDebug() << "connecting with host" << demoServerHost << "isRelay:" << isRelay;
+
+				if( isRelay )
+				{
+					if( m_demoServer == nullptr )
+					{
+						m_demoServer = new DemoServer( demoServerHost, demoServerPort,
+													   {},
+													   message.argument( Argument::DemoAccessToken ).toByteArray(),
+													   m_configuration,
+													   demoServerPort,
+													   this );
+					}
+					m_demoClient = new DemoClient( QStringLiteral("127.0.0.1"), demoServerPort, isFullscreenDemo, viewport );
+				}
+				else
+				{
+					m_demoClient = new DemoClient( demoServerHost, demoServerPort, isFullscreenDemo, viewport );
+				}
 			}
 			return true;
 
 		case FeatureCommand::StopDemoClient:
 			delete m_demoClient;
 			m_demoClient = nullptr;
+
+			if( m_demoServer )
+			{
+				m_demoServer->terminate();
+				m_demoServer = nullptr;
+			}
 
 			QCoreApplication::quit();
 
@@ -642,11 +678,75 @@ bool DemoFeaturePlugin::controlDemoClient( Feature::Uid featureUid, Operation op
 			}
 		}
 
+		if( m_configuration.treeRelayEnabled() && computerControlInterfaces.size() > 1 )
+		{
+			ComputerControlInterfaceList activeInterfaces;
+			ComputerControlInterfaceList otherInterfaces;
+			for( const auto& iface : computerControlInterfaces )
+			{
+				if( iface && iface->state() == ComputerControlInterface::State::Connected )
+				{
+					activeInterfaces.append( iface );
+				}
+				else if( iface )
+				{
+					otherInterfaces.append( iface );
+				}
+			}
+
+			// Randomly shuffle active interfaces for fair, adaptive relay distribution
+			auto rng = QRandomGenerator::global();
+			for( int i = activeInterfaces.size() - 1; i > 0; --i )
+			{
+				int j = rng->bounded( i + 1 );
+				activeInterfaces.swapItemsAt( i, j );
+			}
+
+			activeInterfaces.append( otherInterfaces );
+
+			const int totalNodes = activeInterfaces.size();
+			const int fanOut = qMax( 2, m_configuration.treeFanOut() );
+
+			for( int i = 0; i < totalNodes; ++i )
+			{
+				QString parentHost;
+				if( i < fanOut )
+				{
+					// Root layer connects to master (or designated source)
+					parentHost = demoServerHost;
+				}
+				else
+				{
+					const int parentIndex = ( i - fanOut ) / fanOut;
+					const auto& parentIface = activeInterfaces[parentIndex];
+					parentHost = HostAddress::parseHost( parentIface->computer().hostName() );
+					if( parentHost.isEmpty() )
+					{
+						parentHost = parentIface->computer().hostAddress().toString();
+					}
+				}
+
+				const int firstChildIndex = i * fanOut + fanOut;
+				const bool isRelay = ( firstChildIndex < totalNodes );
+
+				sendFeatureMessage( FeatureMessage{ featureUid, FeatureCommand::StartDemoClient }
+										.addArgument( Argument::DemoAccessToken, demoAccessToken )
+										.addArgument( Argument::DemoServerHost, parentHost )
+										.addArgument( Argument::DemoServerPort, demoServerPort )
+										.addArgument( Argument::Viewport, viewport )
+										.addArgument( Argument::IsRelay, isRelay ),
+									{ activeInterfaces[i] } );
+			}
+
+			return true;
+		}
+
 		sendFeatureMessage(FeatureMessage{featureUid, FeatureCommand::StartDemoClient}
 								.addArgument( Argument::DemoAccessToken, demoAccessToken )
 								.addArgument( Argument::DemoServerHost, demoServerHost )
 								.addArgument( Argument::DemoServerPort, demoServerPort )
-								.addArgument( Argument::Viewport, viewport ),
+								.addArgument( Argument::Viewport, viewport )
+								.addArgument( Argument::IsRelay, false ),
 							computerControlInterfaces );
 
 		return true;
