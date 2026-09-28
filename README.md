@@ -18,7 +18,7 @@ The following features are available in Veyon:
 
   * Overview: monitor all computers in one or multiple locations or classrooms
   * Remote access: view or control computers to watch and support users
-  * Demo: broadcast the teacher's screen in realtime (fullscreen/window)
+  * Demo: broadcast the teacher's screen in realtime (fullscreen/window, with tree-based dynamic relay support, see [README_TREE_RELAY.md](README_TREE_RELAY.md))
   * Screen lock: draw attention to what matters right now
   * Communication: send text messages to students
   * Start and end lessons: log in and log out users all at once
